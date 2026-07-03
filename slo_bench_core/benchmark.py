@@ -1,6 +1,7 @@
 """Benchmark 执行 - 调用 vllm bench serve 子进程,提取指标,写 CSV/perf_log。"""
 
 import logging
+import math
 import os
 import subprocess
 import time
@@ -11,12 +12,16 @@ from .config import (
     BENCH_MAX_ERRORS,
     DATASET_NAME,
     ENABLE_DOUBLE_RUN,
+    ENABLE_PREFIX_REPETITION,
     HOST,
     IGNORE_EOS,
     MAX_RETRIES,
     MODEL,
     POST_TEST_SLEEP,
     PORT,
+    PREFIX_REPETITION_DATASET_NAME,
+    PREFIX_REPETITION_NUM_PREFIXES,
+    PREFIX_REPETITION_PC_RATIO,
     RETRY_SLEEP,
     SAFE_MARGIN,
     SERVED_MODEL_NAME,
@@ -69,6 +74,29 @@ def save_perf_log_entry(input_len: int, output_len: int, concurrency: int, metri
 
 
 def _build_bench_cmd(input_len: int, output_len: int, concurrency: int):
+    """根据 ENABLE_PREFIX_REPETITION 开关下发 random 或 prefix_repetition 命令。"""
+    if ENABLE_PREFIX_REPETITION:
+        # 开启前缀重复模式:prefix + suffix + output 三段
+        # pc_ratio 由 PREFIX_REPETITION_PC_RATIO 控制(prefix 在输入中的占比)
+        # prefix 和 suffix 都向上取整(可能 prefix+suffix > input_len 1 个 token)
+        prefix_len = math.ceil(input_len * PREFIX_REPETITION_PC_RATIO)
+        suffix_len = math.ceil(input_len * (1 - PREFIX_REPETITION_PC_RATIO))
+        return [
+            "vllm", "bench", "serve",
+            "--host", HOST,
+            "--port", PORT,
+            "--backend", BACKEND,
+            "--served-model-name", SERVED_MODEL_NAME,
+            "--model", MODEL,
+            "--dataset-name", PREFIX_REPETITION_DATASET_NAME,
+            "--num-prompts", str(concurrency),
+            "--prefix-repetition-prefix-len", str(prefix_len),
+            "--prefix-repetition-suffix-len", str(suffix_len),
+            "--prefix-repetition-output-len", str(output_len),
+            "--prefix-repetition-num-prefixes", str(PREFIX_REPETITION_NUM_PREFIXES),
+            IGNORE_EOS,
+        ]
+    # 默认 random 模式
     return [
         "vllm", "bench", "serve",
         "--host", HOST,

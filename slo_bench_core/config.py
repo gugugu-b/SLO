@@ -5,7 +5,7 @@ import time
 # ============================================================
 # 版本号
 # ============================================================
-VERSION = "v1.2"
+VERSION = "v1.3"
 
 # 测试用例:(input_len, output_len, 初始并发low, 初始并发high, TTFT阈值, TPOT阈值)
 IO = [
@@ -32,6 +32,14 @@ SERVED_MODEL_NAME = "DeepSeek-V4-Flash-Channel-FP8-w8a8"
 MODEL = "/data/model/DeepSeek-V4-Flash-Channel-FP8-w8a8"
 DATASET_NAME = "random"
 IGNORE_EOS = "--ignore-eos"
+
+# ============================================================
+# 前缀重复测试开关(默认关闭,启用后 _build_bench_cmd 切换到 prefix_repetition 命令)
+# ============================================================
+ENABLE_PREFIX_REPETITION = False
+PREFIX_REPETITION_DATASET_NAME = "prefix_repetition"
+PREFIX_REPETITION_PC_RATIO = 0.9
+PREFIX_REPETITION_NUM_PREFIXES = 1
 
 # 优化参数
 MAX_RETRIES = 2               # 失败重试次数
