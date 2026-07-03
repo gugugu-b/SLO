@@ -47,9 +47,13 @@ def reset_bench_error_counter():
 
 
 def save_perf_log_entry(input_len: int, output_len: int, concurrency: int, metrics: dict, raw_output: str):
-    """保存 perf_log 格式的日志条目(原始输出 + 提取的指标)。"""
+    """保存 perf_log 格式的日志条目(原始输出 + 提取的指标)。
+
+    文件名格式: il{input_len}_ol{output_len}_np{concurrency}_mc{concurrency}.log
+    当前 np/mc 都取同一个 concurrency(1:1),命名上拆成两段以便将来按比例拆批。
+    """
     os.makedirs(PERF_LOG_DIR, exist_ok=True)
-    sub_log_file = f"{PERF_LOG_DIR}/il{input_len}_ol{output_len}_c{concurrency}.log"
+    sub_log_file = f"{PERF_LOG_DIR}/il{input_len}_ol{output_len}_np{concurrency}_mc{concurrency}.log"
     with open(sub_log_file, 'w', encoding='utf-8') as f:
         f.write(f"Input Length: {input_len}\n")
         f.write(f"Output Length: {output_len}\n")

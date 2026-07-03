@@ -138,24 +138,28 @@ git diff v1.0 v1.1     # 对比两个版本
 
 | 版本     | 日期       | 主要变更                                                                |
 |----------|------------|-------------------------------------------------------------------------|
+| **v1.2** | 2026-07-03 | perf_log 文件名格式 `il{il}_ol{ol}_c{c}` → `il{il}_ol{ol}_np{con}_mc{con}` |
 | **v1.1** | 2026-07-02 | 修复 12 个指标提取失败的 `re.sub` bug;加启动日志;清理 9 个死配置         |
 | **v1.0** | 2026-07-02 | 初始版本:自适应并发搜索 + 临界确认测试,完整链路打通                      |
-
-完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
 ## 输出物
 
-跑完一次,会在 `./slo_bench/perf_log/` 下生成:
+跑完一次,会在 `./slo_bench/perf_log/<模型名>/` 下生成若干 perf_log 文件,命名格式:
 
 ```
-slo_bench/perf_log/
-└── <日期>_<时间>_<模型名>/
-    ├── raw_<时间戳>.csv           # 每轮 benchmark 原始数据
-    ├── max_results_<时间戳>.csv   # 每个 (input_len, output_len) 的最优并发
-    └── perf_<时间戳>.log          # 完整运行日志(追加)
+il{input_len}_ol{output_len}_np{concurrency}_mc{concurrency}.log
 ```
+
+- `il` — input length (输入 token 数)
+- `ol` — output length (输出 token 数)
+- `np` — num prompts(请求数,传给 `vllm bench serve --num-prompts`)
+- `mc` — max concurrency (并发数)
+
+> 当前实现里 `np` 和 `mc` 数值上等于同一个 `concurrency`(1:1),文件名按两个维度同时记录,方便将来拆开(`np=200, mc=20` 这种分批跑场景)时快速定位历史日志。
+>
+> CSV 输出(原始数据 / 最优结果)在 `slo_bench/slo_log/<日期>/context_<il>x<ol>/` 下,文件名 `vllm_bench_result-<il>x<ol>-TTFT<ttft>-TPOT<tpot>.csv`、 `max_results-<...>.csv`、`summary_<日期>.csv`。
 
 `max_results_*.csv` 的列:
 
