@@ -1,0 +1,8 @@
+# 本项目仅使用 Python 标准库(>=3.9),无需安装第三方包。
+# 唯一外部依赖:vllm bench serve CLI(由被测服务侧提供,不在本仓库安装)。
+#
+# 标准库使用清单:
+#   - logging / re / csv / os / time / math / glob / subprocess / typing
+#
+# 如果你的 vllm 环境自带 vllm bench serve 子命令,直接跑即可。
+# 否则参考 vLLM 官方文档安装:  https://docs.vllm.ai/en/latest/benchmarking/
