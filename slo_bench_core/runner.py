@@ -7,7 +7,7 @@ import os
 import time
 
 from .benchmark import reset_bench_error_counter
-from .config import IO, PERF_LOG_DIR, PERF_MODEL_NAME, SCRIPT_START_DATE, SCRIPT_START_TIME, TTFT_LABEL, TPOT_LABEL
+from .config import IO, PERF_LOG_DIR, PERF_MODEL_NAME, SCRIPT_START_DATE, SCRIPT_START_TIME, TTFT_LABEL, TPOT_LABEL, VERSION
 from .csv_io import get_base_filename, write_to_csv
 from .metrics import reset_warnings
 from .search import adaptive_concurrency_search
@@ -82,7 +82,7 @@ def _write_best_metrics_csv(summary_results):
 
 def run_test_cases():
     """遍历 IO 测试用例,执行自适应搜索,写汇总 CSV。"""
-    logging.info("开始vllm_benchmark并发自动摸高测试")
+    logging.info(f"[{VERSION}] 开始vllm_benchmark并发自动摸高测试")
     start_time = time.time()
     summary_results = []
 

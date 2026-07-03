@@ -374,7 +374,7 @@ def adaptive_concurrency_search(input_len: int, output_len: int,
                 if predicted and predicted > best_concurrency:
                     if margin < SEARCH_PARAMS["MARGIN_LOW"]:
                         # TTFT 已是瓶颈,小步长
-                        step = max(int(best_concurrency * 0.3), 10)
+                        step = max(int(best_concurrency * SEARCH_PARAMS["SMALL_STEP_RATIO"]), 10)
                         test_concurrency = min(best_concurrency + step, MAX_CONCURRENCY_LIMIT)
                         logging.info(
                             f"TPOT差距大({tpot_gap:.1f}ms)但TTFT margin只有{margin:.2f}x，TTFT是瓶颈，用小步长: "
@@ -382,9 +382,9 @@ def adaptive_concurrency_search(input_len: int, output_len: int,
                         )
                     else:
                         if not isinstance(predicted, (int, float)) or not math.isfinite(predicted):
-                            step = 50
+                            step = SEARCH_PARAMS["STEP_FALLBACK"]
                         else:
-                            step = max(int(predicted - best_concurrency) + 50, 50)
+                            step = max(int(predicted - best_concurrency) + SEARCH_PARAMS["LARGE_STEP_OFFSET"], SEARCH_PARAMS["LARGE_STEP_OFFSET"])
                         test_concurrency = min(best_concurrency + step, MAX_CONCURRENCY_LIMIT)
                         logging.info(
                             f"TPOT差距大({tpot_gap:.1f}ms)，大步长跳到 {test_concurrency} (预测临界={predicted:.0f})"
@@ -446,18 +446,18 @@ def adaptive_concurrency_search(input_len: int, output_len: int,
                     # 无法预测,基于 TPOT 剩余空间算步长
                     tpot_remaining = tpot_target - best_tpot
                     if margin < SEARCH_PARAMS["MARGIN_LOW"]:
-                        step = max(int(best_concurrency * 0.3), 10)
+                        step = max(int(best_concurrency * SEARCH_PARAMS["SMALL_STEP_RATIO"]), 10)
                         logging.info(
                             f"无法预测且TTFT margin只有{margin:.2f}x，TTFT是瓶颈，用小步长: "
                             f"{best_concurrency} -> {best_concurrency + step}"
                         )
                     else:
-                        if tpot_remaining > 50:
+                        if tpot_remaining > SEARCH_PARAMS["TPOT_REMAINING_HIGH"]:
                             step = best_concurrency
-                        elif tpot_remaining > 20:
+                        elif tpot_remaining > SEARCH_PARAMS["TPOT_REMAINING_LOW"]:
                             step = best_concurrency // 2
                         else:
-                            step = 100
+                            step = SEARCH_PARAMS["STEP_FALLBACK"]
                     test_concurrency = min(best_concurrency + step, MAX_CONCURRENCY_LIMIT)
                     if test_concurrency == best_concurrency:
                         return _force_binary_on_cap(
@@ -486,22 +486,24 @@ def adaptive_concurrency_search(input_len: int, output_len: int,
                 gap = predicted - best_concurrency
                 ratio = 0.5 if margin > 3 else SEARCH_PARAMS["GOLDEN_RATIO"]
                 step = int(gap * ratio)
-                step = max(10, min(step, 200))
+                step = max(10, min(step, SEARCH_PARAMS["STEP_UPPER_BOUND"]))
             else:
+                # 分级阶梯(内部参数保留硬编码:每级 margin → 倍数 / 基数 / 上限)
+                # margin 越大越激进;边界由 STEP_UPPER_BOUND 控制全局上限
                 if margin > 10:
-                    step = max(50, min(int(best_concurrency * 4), 200))
+                    step = max(50, min(int(best_concurrency * 4), SEARCH_PARAMS["STEP_UPPER_BOUND"]))
                 elif margin > 5:
                     step = max(30, min(int(best_concurrency * 3), 150))
                 elif margin > 2:
                     step = max(10, min(int(best_concurrency * 1.5), 100))
                 else:
-                    step = max(5, min(int(best_concurrency * 0.5), 50))
+                    step = max(SEARCH_PARAMS["STEP_LOWER_BOUND"], min(int(best_concurrency * 0.5), 50))
         else:
             if margin > 5:
                 step = int(best_concurrency * 3)
             else:
                 step = int(best_concurrency * 1.5)
-            step = max(20, min(step, 200))
+            step = max(20, min(step, SEARCH_PARAMS["STEP_UPPER_BOUND"]))
 
         new_concurrency = best_concurrency + step
 
@@ -549,7 +551,7 @@ def adaptive_concurrency_search(input_len: int, output_len: int,
 
         if ttft == -1 or tpot == -1:
             step = int(step * 0.5)
-            if step < SEARCH_PARAMS["STEP_MIN"]:
+            if step < SEARCH_PARAMS["STEP_LOWER_BOUND"]:
                 logging.warning(f"步长已减小到{step}，无法继续探索")
                 return best_ttft, best_tpot, best_concurrency, cached_results
             new_concurrency = best_concurrency + step

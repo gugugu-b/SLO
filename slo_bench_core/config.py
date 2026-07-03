@@ -2,12 +2,16 @@
 
 import time
 
+# ============================================================
+# 版本号
+# ============================================================
+VERSION = "v1.1"
+
 # 测试用例:(input_len, output_len, 初始并发low, 初始并发high, TTFT阈值, TPOT阈值)
 IO = [
-    (1024, 1024, 2, 256, 3000, 100),
-    (2048, 1024, 2, 256, 3000, 100),
-    (4096, 1024, 2, 256, 3000, 100),
-    (8192, 1024, 2, 256, 3000, 100),
+    (8192, 1024, 2, 128, 3000, 100),
+    (16384, 1024, 2, 128, 3000, 100),
+    (32768, 1024, 2, 128, 3000, 100),
 ]
 
 
@@ -24,36 +28,40 @@ SAFE_MARGIN = 0.03  # 安全余量
 HOST = "0.0.0.0"
 PORT = "30000"
 BACKEND = "vllm"
-SERVED_MODEL_NAME = "Qwen3.6-35B-A3B"
-MODEL = "/data/model/Qwen3.6-35B-A3B"
+SERVED_MODEL_NAME = "DeepSeek-V4-Flash-Channel-FP8-w8a8"
+MODEL = "/data/model/DeepSeek-V4-Flash-Channel-FP8-w8a8"
 DATASET_NAME = "random"
 IGNORE_EOS = "--ignore-eos"
 
 # 优化参数
 MAX_RETRIES = 2               # 失败重试次数
 BENCH_MAX_ERRORS = MAX_RETRIES + 1  # 子进程连续失败上限,超出则抛 BenchmarkError
-MAX_CONCURRENCY_LIMIT = 256    # 并发搜索上限
+MAX_CONCURRENCY_LIMIT = 128    # 并发搜索上限
 ENABLE_FINAL_CONFIRMATION = True  # 最优并发做最终确认测试
 ENABLE_DOUBLE_RUN = True      # 第一次预热,第二次作为正式结果
 
 # 搜索策略参数
 SEARCH_PARAMS = {
-    "TPOT_GAP_LARGE": 30,        # 大步长: TPOT 差距 > 此值
-    "TPOT_GAP_MEDIUM": 10,       # 小步长: TPOT 差距 > 此值
-    "STEP_DBL": "double",        # tpot_gap > 50 时翻倍
-    "STEP_HALF": "half",         # tpot_gap > 20 时减半
-    "STEP_FALLBACK": 100,        # 其它情况固定步长
-    "STEP_MIN": 5,
-    "STEP_MAX": 200,
-    "MARGIN_VERY_HIGH": 10,
-    "MARGIN_HIGH": 5,
-    "MARGIN_MEDIUM": 2,
-    "MARGIN_LOW": 1.5,           # TTFT 成瓶颈的阈值
-    "GOLDEN_RATIO": 0.382,
-    "SMALL_STEP_RATIO": 0.3,
-    "LARGE_STEP_OFFSET": 50,
-    "STUCK_THRESHOLD": 3,
-    "STEP_HALVE_MIN": 10,
+    # === 阈值(策略切换) ===
+    "TPOT_GAP_LARGE": 30,        # 小步长切换线: tpot_gap ≤ 此值走"小步长精细搜索"
+    "MARGIN_LOW": 1.5,           # TTFT 瓶颈判定: margin < 此值视为 TTFT 已接近阈值
+    "TPOT_REMAINING_HIGH": 50,   # TPOT 剩余空间高阈值: tpot_remaining > 此值用翻倍
+    "TPOT_REMAINING_LOW": 20,    # TPOT 剩余空间低阈值: 高/低之间减半,更低用 STEP_FALLBACK
+
+    # === 步长边界 ===
+    "STEP_UPPER_BOUND": 200,     # 步长硬上限(全局)
+    "STEP_LOWER_BOUND": 5,       # 步长硬下限(全局)
+    "STEP_FALLBACK": 100,        # 兜底固定步长(预测/TPOT 剩余空间不可用时)
+
+    # === 步长比例 ===
+    "GOLDEN_RATIO": 0.382,       # 黄金分割(动态步长探索,余量低时)
+    "SMALL_STEP_RATIO": 0.3,     # 小步长比例(预测步长 / TTFT 瓶颈分支)
+
+    # === 大步长偏移 ===
+    "LARGE_STEP_OFFSET": 50,     # 预测临界点 + 此偏移(大步长分支)
+
+    # === 防卡死 ===
+    "STUCK_THRESHOLD": 3,        # 连续相同并发次数,达到后强制二分
 }
 
 # 运行时参数
@@ -63,7 +71,7 @@ RETRY_SLEEP = 2                 # 失败重试间隔(秒)
 
 # perf_log 相关
 PERF_LOG_DIR = "./slo_bench/perf_log"
-PERF_MODEL_NAME = "Qwen3.6-35B-A3B"  # 与 SERVED_MODEL_NAME 一致
+PERF_MODEL_NAME = "DeepSeek-V4-Flash-Channel-FP8-w8a8"  # 与 SERVED_MODEL_NAME 一致
 
 # CSV 表头
 VLLM_BENCH_HEADERS = [
