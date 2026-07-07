@@ -4,6 +4,22 @@
 
 ---
 
+## [v1.4] - 2026-07-07
+
+相对 v1.3 的变更。
+
+### 新功能
+- **prefix_repetition 模式 num_prompts 加倍率**(`config.py` + `benchmark.py`): 新增 `NUM_PROMPTS_PER_CONCURRENCY = 4` 常量,启用 `ENABLE_PREFIX_REPETITION` 时 `--num-prompts = 并发 × 4`,即每个并发跑 4 个请求汇总体,给 prefix 缓存充分热身。`random` 模式保持原样(`--num-prompts = 并发`,1:1)。
+- **perf_log 文件名 np 段按模式分支**(`benchmark.py`): `save_perf_log_entry` 根据 `ENABLE_PREFIX_REPETITION` 决定 np 值(random 模式 `np = mc`,prefix_repetition 模式 `np = mc × 4`),文件名跟实际命令保持一致。
+
+### 重构
+- **配置归位**(`config.py`): `NUM_PROMPTS_PER_CONCURRENCY` 从 `vllm bench serve 固定参数` 块挪到 `前缀重复测试开关` 块下,跟 `ENABLE_PREFIX_REPETITION` 等常量聚拢,功能不变。
+
+### 文档
+- README np/mc 描述分模式说明(random / prefix_repetition 各自规则)。
+
+---
+
 ## [v1.3] - 2026-07-07
 
 相对 v1.2 的变更。
