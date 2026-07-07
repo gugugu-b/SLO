@@ -4,6 +4,18 @@
 
 ---
 
+## [v1.3] - 2026-07-07
+
+相对 v1.2 的变更。
+
+### 新功能
+- **前缀重复测试模式**(`config.py` + `benchmark.py`): 新增 `ENABLE_PREFIX_REPETITION` 开关(默认关闭),启用后 `_build_bench_cmd` 切到 `prefix_repetition` dataset,通过 `PREFIX_REPETITION_PC_RATIO` 控制 prefix 在输入中的占比(prefix + suffix 都向上取整,可能比 `input_len` 多 1 token)。用于压测前缀缓存命中场景下的吞吐上界。
+
+### Bug 修复
+- **vllm bench serve 缺 `--max-concurrency`**(`benchmark.py`): random 和 prefix_repetition 两种模式在 `--num-prompts` 之后都漏传 `--max-concurrency`,导致 vLLM 走默认串行执行,压不出真实并发吞吐。两个分支 `--num-prompts` 之后均补齐。
+
+---
+
 ## [v1.2] - 2026-07-03
 
 相对 v1.1 的变更。
