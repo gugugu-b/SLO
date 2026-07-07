@@ -54,11 +54,12 @@ def reset_bench_error_counter():
 def save_perf_log_entry(input_len: int, output_len: int, concurrency: int, metrics: dict, raw_output: str):
     """保存 perf_log 格式的日志条目(原始输出 + 提取的指标)。
 
-    文件名格式: il{input_len}_ol{output_len}_np{concurrency}_mc{concurrency}.log
-    当前 np/mc 都取同一个 concurrency(1:1),命名上拆成两段以便将来按比例拆批。
+    文件名格式: il{input_len}_ol{output_len}_np{np}_mc{concurrency}.log
+    np 按 dataset 模式区分:random 模式下 np = mc;prefix_repetition 模式下 np = mc × NUM_PROMPTS_PER_CONCURRENCY。
     """
     os.makedirs(PERF_LOG_DIR, exist_ok=True)
-    sub_log_file = f"{PERF_LOG_DIR}/il{input_len}_ol{output_len}_np{concurrency}_mc{concurrency}.log"
+    np_val = concurrency * NUM_PROMPTS_PER_CONCURRENCY if ENABLE_PREFIX_REPETITION else concurrency
+    sub_log_file = f"{PERF_LOG_DIR}/il{input_len}_ol{output_len}_np{np_val}_mc{concurrency}.log"
     with open(sub_log_file, 'w', encoding='utf-8') as f:
         f.write(f"Input Length: {input_len}\n")
         f.write(f"Output Length: {output_len}\n")
@@ -89,7 +90,7 @@ def _build_bench_cmd(input_len: int, output_len: int, concurrency: int):
             "--served-model-name", SERVED_MODEL_NAME,
             "--model", MODEL,
             "--dataset-name", PREFIX_REPETITION_DATASET_NAME,
-            "--num-prompts", str(concurrency),
+            "--num-prompts", str(concurrency * NUM_PROMPTS_PER_CONCURRENCY),
             "--max-concurrency", str(concurrency),
             "--prefix-repetition-prefix-len", str(prefix_len),
             "--prefix-repetition-suffix-len", str(suffix_len),

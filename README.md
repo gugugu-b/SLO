@@ -150,7 +150,7 @@ git diff v1.0 v1.1     # 对比两个版本
 跑完一次,会在 `./slo_bench/perf_log/<模型名>/` 下生成若干 perf_log 文件,命名格式:
 
 ```
-il{input_len}_ol{output_len}_np{concurrency}_mc{concurrency}.log
+il{input_len}_ol{output_len}_np{np}_mc{concurrency}.log
 ```
 
 - `il` — input length (输入 token 数)
@@ -158,7 +158,11 @@ il{input_len}_ol{output_len}_np{concurrency}_mc{concurrency}.log
 - `np` — num prompts(请求数,传给 `vllm bench serve --num-prompts`)
 - `mc` — max concurrency (并发数)
 
-> 当前实现里 `np` 和 `mc` 数值上等于同一个 `concurrency`(1:1),文件名按两个维度同时记录,方便将来拆开(`np=200, mc=20` 这种分批跑场景)时快速定位历史日志。
+> `np` 按 dataset 模式区分:
+> - `random` 模式: `np = mc`(1:1)
+> - `prefix_repetition` 模式: `np = mc × NUM_PROMPTS_PER_CONCURRENCY`(默认 ×4,即每个并发跑 4 个请求再汇总体,用来给 prefix 缓存充分热身)
+>
+> 文件名按两个维度同时记录,方便将来调整比例。
 >
 > CSV 输出(原始数据 / 最优结果)在 `slo_bench/slo_log/<日期>/context_<il>x<ol>/` 下,文件名 `vllm_bench_result-<il>x<ol>-TTFT<ttft>-TPOT<tpot>.csv`、 `max_results-<...>.csv`、`summary_<日期>.csv`。
 

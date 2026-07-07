@@ -32,6 +32,8 @@ SERVED_MODEL_NAME = "DeepSeek-V4-Flash-Channel-FP8-w8a8"
 MODEL = "/data/model/DeepSeek-V4-Flash-Channel-FP8-w8a8"
 DATASET_NAME = "random"
 IGNORE_EOS = "--ignore-eos"
+# 传给 --num-prompts 的请求数 = 并发数 × 这个倍数(默认 4,即每个并发跑 4 个请求再汇总体)
+NUM_PROMPTS_PER_CONCURRENCY = 4
 
 # ============================================================
 # 前缀重复测试开关(默认关闭,启用后 _build_bench_cmd 切换到 prefix_repetition 命令)
