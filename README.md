@@ -182,6 +182,9 @@ input_len, output_len, concurrency, ttft, tpot, is_optimal
 **Q: 跑起来只看到 WARNING,看不到进度?**
 A: v1.0 入口没配 logging,v1.1 已修。`git checkout v1.1 && python run.py` 即可。
 
+**Q: 测试时崩 `OverflowError: cannot convert float infinity to integer`?**
+A: 出现在 v1.4 及之前的 `slo_bench_core/search.py:340`(小步长分支),`predict_tpot_critical_point` 在 TPOT 梯度 ≤ 0 时返回 `float('inf')`,小步长分支漏了 `math.isfinite` 守卫,`int(inf - x)` 直接挂。常见触发场景: **TTFT 已是瓶颈(压到 ttft_max 附近),TPOT 仍远低于 tpot_max**,历史两点 TPOT 随并发增加反而微降(vLLM batching 摊薄)。已修: 补 `math.isfinite` 守卫,无法预测时回退到 `+20` 步长继续探索。
+
 **Q: CSV 里某些指标值是 `inf`?**
 A: v1.0 的 `_build_combined_metric_re` 有 bug,v1.1 已重构为逐指标独立正则。切到 v1.1 或更新版本即可。
 

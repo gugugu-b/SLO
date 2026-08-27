@@ -337,7 +337,7 @@ def adaptive_concurrency_search(input_len: int, output_len: int,
         if tpot_gap <= SEARCH_PARAMS["TPOT_GAP_LARGE"]:
             if len(history_points) >= 2:
                 predicted = predict_tpot_critical_point(history_points, tpot_max)
-                if predicted and predicted > best_concurrency:
+                if predicted and predicted > best_concurrency and math.isfinite(predicted):
                     gap = predicted - best_concurrency
                     step = max(int(gap * SEARCH_PARAMS["SMALL_STEP_RATIO"]), 10)
                     test_concurrency = min(best_concurrency + step, int(predicted), MAX_CONCURRENCY_LIMIT)
