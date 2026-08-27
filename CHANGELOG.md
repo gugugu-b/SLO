@@ -4,9 +4,9 @@
 
 ---
 
-## [Unreleased]
+## [v1.4.1] - 2026-08-27
 
-相对 v1.4 的变更。下次发版时把本段标题改为 `[vX.Y] - YYYY-MM-DD` 即可。
+相对 v1.4 的变更。
 
 ### Bug 修复
 - **小步长分支 `OverflowError`**(`search.py`): `predict_tpot_critical_point` 在 TPOT 梯度 ≤ 0 时返回 `float('inf')` 表达"无法预测临界并发",而小步长分支(`tpot_gap <= TPOT_GAP_LARGE`)调用前漏了 `math.isfinite` 守卫,导致 `int(inf - x)` 抛 `OverflowError: cannot convert float infinity to integer`。与另两处调用(大步长分支 / 动态步长分支)处理对齐,补 `math.isfinite(predicted)` 守卫;无法预测时回退到 `+20` 步长继续探索,后续若触到 TTFT 上限会自然走到 `_force_binary_on_cap` 做二分。**触发场景**: TTFT 已是瓶颈(压到 ttft_max 附近),TPOT 还远低于 tpot_max 阈值,历史两点 TPOT 随并发不升反降(vLLM batching 摊薄 decode 时间但排队拉长 TTFT),梯度出现 -0.x ms/并发 的情况。

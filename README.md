@@ -138,6 +138,7 @@ git diff v1.0 v1.1     # 对比两个版本
 
 | 版本     | 日期       | 主要变更                                                                |
 |----------|------------|-------------------------------------------------------------------------|
+| **v1.4.1** | 2026-08-27 | 修复小步长分支漏 `math.isfinite` 守卫导致 `OverflowError`(TTFT 瓶颈 + TPOT 梯度 ≤0 场景) |
 | **v1.4** | 2026-07-07 | prefix_repetition 模式 num_prompts = 并发 × 4(`NUM_PROMPTS_PER_CONCURRENCY`);文件名 np 段按模式分支 |
 | **v1.3** | 2026-07-07 | 新增 `ENABLE_PREFIX_REPETITION` 前缀重复测试模式;修复 random/prefix_repetition 两种模式漏传 `--max-concurrency` 导致并发压不出 |
 | **v1.2** | 2026-07-03 | perf_log 文件名格式 `il{il}_ol{ol}_c{c}` → `il{il}_ol{ol}_np{con}_mc{con}` |
@@ -183,7 +184,7 @@ input_len, output_len, concurrency, ttft, tpot, is_optimal
 A: v1.0 入口没配 logging,v1.1 已修。`git checkout v1.1 && python run.py` 即可。
 
 **Q: 测试时崩 `OverflowError: cannot convert float infinity to integer`?**
-A: 出现在 v1.4 及之前的 `slo_bench_core/search.py:340`(小步长分支),`predict_tpot_critical_point` 在 TPOT 梯度 ≤ 0 时返回 `float('inf')`,小步长分支漏了 `math.isfinite` 守卫,`int(inf - x)` 直接挂。常见触发场景: **TTFT 已是瓶颈(压到 ttft_max 附近),TPOT 仍远低于 tpot_max**,历史两点 TPOT 随并发增加反而微降(vLLM batching 摊薄)。已修: 补 `math.isfinite` 守卫,无法预测时回退到 `+20` 步长继续探索。
+A: 出现在 v1.4 及之前的 `slo_bench_core/search.py:340`(小步长分支),`predict_tpot_critical_point` 在 TPOT 梯度 ≤ 0 时返回 `float('inf')`,小步长分支漏了 `math.isfinite` 守卫,`int(inf - x)` 直接挂。常见触发场景: **TTFT 已是瓶颈(压到 ttft_max 附近),TPOT 仍远低于 tpot_max**,历史两点 TPOT 随并发增加反而微降(vLLM batching 摊薄)。v1.4.1 已修: 补 `math.isfinite` 守卫,无法预测时回退到 `+20` 步长继续探索。
 
 **Q: CSV 里某些指标值是 `inf`?**
 A: v1.0 的 `_build_combined_metric_re` 有 bug,v1.1 已重构为逐指标独立正则。切到 v1.1 或更新版本即可。
