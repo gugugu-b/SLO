@@ -12,10 +12,13 @@ from .config import (
     BENCH_MAX_ERRORS,
     DATASET_NAME,
     ENABLE_DOUBLE_RUN,
+    ENABLE_METRICS_SCRAPE,
     ENABLE_PREFIX_REPETITION,
     HOST,
     IGNORE_EOS,
     MAX_RETRIES,
+    METRICS_SCRAPE_PATH,
+    METRICS_SCRAPE_TIMEOUT,
     MODEL,
     POST_TEST_SLEEP,
     PORT,
@@ -33,7 +36,14 @@ from .config import (
     PERF_LOG_DIR,
 )
 from .csv_io import get_base_filename, write_to_csv
-from .metrics import _extract_all_metrics, reset_warnings, select_ttft, select_tpot
+from .metrics import (
+    _extract_all_metrics,
+    compute_metrics_rates,
+    reset_warnings,
+    scrape_prometheus_metrics,
+    select_ttft,
+    select_tpot,
+)
 
 
 class BenchmarkError(Exception):
@@ -43,6 +53,27 @@ class BenchmarkError(Exception):
 
 # 子进程连续失败计数,达到 BENCH_MAX_ERRORS 抛 BenchmarkError
 _bench_err_num = 0
+
+# /metrics 抓取失败是否已告警过(只告警一次,避免每个测试点刷屏)
+_metrics_scrape_warned = False
+
+
+def _scrape_metrics_snapshot():
+    """抓取一次 /metrics 快照;开关关闭或抓取失败返回 None(失败只告警一次)。"""
+    global _metrics_scrape_warned
+    if not ENABLE_METRICS_SCRAPE:
+        return None
+    try:
+        return scrape_prometheus_metrics(HOST, PORT, METRICS_SCRAPE_PATH, METRICS_SCRAPE_TIMEOUT)
+    except Exception as e:
+        if not _metrics_scrape_warned:
+            logging.warning(
+                f"抓取 http://{HOST}:{PORT}{METRICS_SCRAPE_PATH} 失败: {e}; "
+                "prefix cache 命中率与投机采样接受率将留空"
+                "(服务未暴露 /metrics 时可用 ENABLE_METRICS_SCRAPE=False 关闭抓取)"
+            )
+            _metrics_scrape_warned = True
+        return None
 
 
 def reset_bench_error_counter():
@@ -193,6 +224,26 @@ def _execute_test(cmd, input_len, output_len, concurrency, metrics,
         raise BenchmarkError("请调整参数重新运行") from e
 
 
+def _formal_test_with_scrape(cmd, input_len, output_len, concurrency,
+                             vllm_bench_result_file_name, max_results_file_name):
+    """正式测试:前后各抓一次 /metrics,差值算 prefix cache 命中率与投机采样接受率,注入 metrics。"""
+    before = _scrape_metrics_snapshot()
+    ttft, tpot, metrics = _execute_test(
+        cmd, input_len, output_len, concurrency, {},
+        vllm_bench_result_file_name, max_results_file_name, is_warmup=False,
+    )
+    if metrics:
+        cache_rate, spec_rate = compute_metrics_rates(before, _scrape_metrics_snapshot())
+        metrics['prefix_cache_hit_rate'] = cache_rate
+        # fork 版 bench serve 直接打印的本次测试接受率优先于 /metrics 差值
+        # (不受指标命名差异与其他流量污染;缺失时为 inf,回退差值口径)
+        bench_rate = metrics.get('spec_accept_rate', float('inf'))
+        if math.isfinite(bench_rate):
+            spec_rate = round(bench_rate, 2)
+        metrics['spec_decode_accept_rate'] = spec_rate
+    return ttft, tpot, metrics
+
+
 def run_benchmark_with_metrics(input_len: int, output_len: int, concurrency: int,
                                ttft_max: int, tpot_max: int,
                                vllm_bench_result_file_name: str, max_results_file_name: str) -> Tuple[float, float, dict]:
@@ -212,14 +263,14 @@ def run_benchmark_with_metrics(input_len: int, output_len: int, concurrency: int
                 return -1, -1, {}
 
             logging.info(f"开始正式测试 - 输入长度: {input_len}, 输出长度: {output_len}, 并发数: {concurrency}")
-            return _execute_test(
-                cmd, input_len, output_len, concurrency, {},
-                vllm_bench_result_file_name, max_results_file_name, is_warmup=False,
+            return _formal_test_with_scrape(
+                cmd, input_len, output_len, concurrency,
+                vllm_bench_result_file_name, max_results_file_name,
             )
         else:
-            return _execute_test(
-                cmd, input_len, output_len, concurrency, {},
-                vllm_bench_result_file_name, max_results_file_name, is_warmup=False,
+            return _formal_test_with_scrape(
+                cmd, input_len, output_len, concurrency,
+                vllm_bench_result_file_name, max_results_file_name,
             )
     except Exception as e:
         logging.error(f"测试执行失败: {str(e)}")

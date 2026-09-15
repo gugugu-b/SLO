@@ -79,6 +79,11 @@ SUBPROCESS_TIMEOUT = 3600       # vllm bench serve 子进程超时(秒)
 POST_TEST_SLEEP = 2             # 单次测试后等待(秒)
 RETRY_SLEEP = 2                 # 失败重试间隔(秒)
 
+# /metrics 抓取(用于 prefix cache 命中率与投机采样接受率统计)
+ENABLE_METRICS_SCRAPE = True     # 是否抓取 /metrics
+METRICS_SCRAPE_PATH = "/metrics"  # 抓取路径
+METRICS_SCRAPE_TIMEOUT = 5      # 抓取超时(秒)
+
 # perf_log 相关
 PERF_LOG_DIR = "./slo_bench/perf_log"
 PERF_MODEL_NAME = "DeepSeek-V4-Flash-Channel-FP8-w8a8"  # 与 SERVED_MODEL_NAME 一致
@@ -96,12 +101,14 @@ MAX_RESULTS_HEADERS = [
     "input_len", "output_len", "concurrency", "ttft", "tpot", "is_optimal",
 ]
 
-# import_all_perf.csv 表头:本次运行所有用例的逐并发点关键性能指标汇总(每次运行重写)
-IMPORT_ALL_PERF_HEADERS = [
+# point_metrics-*.csv / import_all_perf.csv 共用表头:
+# 逐并发点关键性能指标(后两列为 /metrics 差值口径的百分数,不可用时留空)
+POINT_METRICS_HEADERS = [
     "input_len", "output_len", "concurrency",
     "mean_ttft", "mean_tpot",
     "output_token_throughput", "total_token_throughput", "benchmark_duration",
     "output_throughput_per_concurrency", "decode_throughput_per_concurrency",
+    "prefix_cache_hit_rate", "spec_decode_accept_rate",
 ]
 
 # 指标正则:每个指标一个独立命名组,内层再命名一个数值捕获组
@@ -122,6 +129,8 @@ METRIC_PATTERNS = {
     'mean_itl': r"[Mm]ean\s+ITL\s*\(ms\)?:\s*(\d+(?:\.\d+)?)",
     'median_itl': r"[Mm]edian\s+ITL\s*\(ms\)?:\s*(\d+(?:\.\d+)?)",
     'p99_itl': r"P99\s+ITL\s*\(ms\)?:\s*(\d+(?:\.\d+)?)",
+    # fork 版 bench serve 直接打印的本次测试接受率(优先于 /metrics 差值口径)
+    'spec_accept_rate': r"[Aa]cceptance\s+[Rr]ate\s*\(%\)\s*:\s*(\d+(?:\.\d+)?)",
 }
 
 INT_METRIC_KEYS = frozenset({'successful_requests', 'total_input_tokens', 'total_generated_tokens'})

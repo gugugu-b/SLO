@@ -66,6 +66,7 @@ git checkout main
 | `SERVED_MODEL_NAME`   | vLLM 已部署的模型名                   | `DeepSeek-V4-Flash-Channel-FP8-w8a8` |
 | `HOST` / `PORT`       | vLLM 服务地址                          | `0.0.0.0:30000` |
 | `MAX_CONCURRENCY_LIMIT` | 并发搜索硬上限                       | `128` |
+| `ENABLE_METRICS_SCRAPE` | 是否抓取被测服务 `/metrics` 统计 prefix cache 命中率 / 投机采样接受率 | `True` |
 | `SEARCH_PARAMS`       | 自适应搜索参数(步长/阈值/防卡死)     | 见文件 |
 
 ---
@@ -138,7 +139,7 @@ git diff v1.0 v1.1     # 对比两个版本
 
 | 版本     | 日期       | 主要变更                                                                |
 |----------|------------|-------------------------------------------------------------------------|
-| **v1.5** | 2026-09-15 | 新增 `slo_bench/import_all_perf.csv` 全场景逐并发点性能汇总表(每次运行重写) |
+| **v1.5** | 2026-09-15 | 新增逐点指标 `point_metrics-*.csv` 与全场景汇总 `import_all_perf.csv`;抓取 `/metrics` 统计 prefix cache 命中率与投机采样接受率 |
 | **v1.4.1** | 2026-08-27 | 修复小步长分支漏 `math.isfinite` 守卫导致 `OverflowError`(TTFT 瓶颈 + TPOT 梯度 ≤0 场景) |
 | **v1.4** | 2026-07-07 | prefix_repetition 模式 num_prompts = 并发 × 4(`NUM_PROMPTS_PER_CONCURRENCY`);文件名 np 段按模式分支 |
 | **v1.3** | 2026-07-07 | 新增 `ENABLE_PREFIX_REPETITION` 前缀重复测试模式;修复 random/prefix_repetition 两种模式漏传 `--max-concurrency` 导致并发压不出 |
@@ -167,7 +168,7 @@ il{input_len}_ol{output_len}_np{np}_mc{concurrency}.log
 >
 > 文件名按两个维度同时记录,方便将来调整比例。
 >
-> CSV 输出(原始数据 / 最优结果)在 `slo_bench/slo_log/<日期>/context_<il>x<ol>/` 下,文件名 `vllm_bench_result-<il>x<ol>-TTFT<ttft>-TPOT<tpot>.csv`、 `max_results-<...>.csv`、`summary_<日期>.csv`。
+> CSV 输出(原始数据 / 最优结果)在 `slo_bench/slo_log/<日期>/context_<il>x<ol>/` 下,文件名 `vllm_bench_result-<il>x<ol>-TTFT<ttft>-TPOT<tpot>.csv`、 `max_results-<...>.csv`、`point_metrics-<...>.csv`、`summary_<日期>.csv`;全场景汇总 `slo_bench/import_all_perf.csv` 见下节。
 
 `max_results_*.csv` 的列:
 
@@ -177,19 +178,41 @@ input_len, output_len, concurrency, ttft, tpot, is_optimal
 
 `is_optimal=1` 的行就是该测试用例下被识别的**临界最大并发数**。
 
-### 全场景性能汇总 import_all_perf.csv
+### 逐点指标 point_metrics-*.csv 与全场景汇总 import_all_perf.csv
 
-每次运行结束还会在 `slo_bench/import_all_perf.csv` 整体重写一张**全场景汇总表**(每次运行重写、只留最新),收录本次运行所有用例实际测过的每个**成功**并发点(含探索点 / 二分点 / 最终确认点 / 最优并发 ±1 参考点),按 `(input_len, output_len, concurrency)` 排序,便于导入表格工具横向对比:
+每个测试用例结束后,在 `slo_bench/slo_log/<日期>/context_<il>x<ol>/` 下写一份
+`point_metrics-<il>x<ol>-TTFT<ttft>-TPOT<tpot>.csv`(每次运行重写),收录该用例本次
+实际测过的每个**成功**并发点(含探索点 / 二分点 / 最终确认点 / 最优并发 ±1 参考点),
+按并发数排序;运行结束再把所有用例的行汇总重写到 `slo_bench/import_all_perf.csv`
+(每次运行重写、只留最新),两张表列完全相同:
 
 ```
 input_len, output_len, concurrency,
 mean_ttft, mean_tpot,
 output_token_throughput, total_token_throughput, benchmark_duration,
-output_throughput_per_concurrency, decode_throughput_per_concurrency
+output_throughput_per_concurrency, decode_throughput_per_concurrency,
+prefix_cache_hit_rate, spec_decode_accept_rate
 ```
 
 - `output_throughput_per_concurrency` — 单并发输出吞吐 = 生成输出吞吐 ÷ 并发数;
-- `decode_throughput_per_concurrency` — 单并发 decode 吞吐 = 1000 ÷ 平均 TPOT(ms),即单条请求流在 decode 阶段的 token 速率。
+- `decode_throughput_per_concurrency` — 单并发 decode 吞吐 = 1000 ÷ 平均 TPOT(ms),即单条请求流在 decode 阶段的 token 速率;
+- `prefix_cache_hit_rate`(prefix cache 命中率,百分数)— 来自被测服务 `/metrics`
+  正式测试**前后快照**的差值,按指标前缀自动识别后端:
+  - vLLM: Δhits ÷ Δqueries × 100(兼容 `vllm:gpu_prefix_cache_*` / `vllm:prefix_cache_*` /
+    `vllm:cpu_prefix_cache_*` 三组候选名,计数器 `_total` 后缀自动解析;服务端需启用
+    `--enable-prefix-caching`,否则该列留空);
+  - SGLang: token 级命中率 Δcached ÷ Δprompt × 100(服务端需 `--enable-metrics` 暴露
+    `/metrics`;unified 等版本无 `cached_tokens_total` 样本时自动退回
+    `1 - Δuncached ÷ Δprompt`);
+- `spec_decode_accept_rate`(投机采样接受率,百分数)— **优先取 bench serve 输出中直接
+  打印的本次测试 `Acceptance rate (%)`**(部分厂商 fork 的 vLLM 会打印,为逐轮精确值),
+  输出中没有该项时回退 `/metrics` 差值口径:
+  - vLLM: Δaccepted ÷ Δdraft × 100;
+  - SGLang: 取测试后快照的 `sglang:spec_accept_rate` Gauge(多 dp_rank 按
+    `spec_accept_length` 配对,空闲 rank 不参与平均)。
+
+抓取失败、服务无该指标或分母为 0 时对应列留空;`ENABLE_METRICS_SCRAPE=False` 可整体
+关闭抓取。
 
 ---
 

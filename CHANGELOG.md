@@ -9,11 +9,41 @@
 相对 v1.4.1 的变更。
 
 ### 新功能
-- **全场景性能汇总表 `import_all_perf.csv`**(`config.py` + `runner.py`): 运行结束把本次所有用例实际测过的每个**成功**并发点(含大步长探索点 / 二分点 / 最终确认点 / 最优并发 ±1 参考点)汇总成一张表,整体重写到 `slo_bench/import_all_perf.csv`(每次运行重写、只留最新,语义参考 bench 项目的同名产物)。数据直接取自 `adaptive_concurrency_search` 返回的 `cached_results`,不产生额外测试开销;失败点(`ttft/tpot` 为 `-1` 或 `inf`)与 `retry_count` 计数键跳过。列结构: `input_len / output_len / concurrency / mean_ttft / mean_tpot / output_token_throughput / total_token_throughput / benchmark_duration` 加两个单并发归一化指标 `output_throughput_per_concurrency`(生成输出吞吐 ÷ 并发数)、`decode_throughput_per_concurrency`(1000 ÷ 平均 TPOT,单条请求流的 decode 速率),按 `(input_len, output_len, concurrency)` 排序,便于导入表格工具横向对比。
-- 新增 `IMPORT_ALL_PERF_HEADERS` 表头常量(`config.py`)。
+- **prefix cache 命中率与投机采样接受率统计**(`metrics.py` + `benchmark.py` + `config.py`):
+  每次正式测试前后各抓一次被测服务 `/metrics`(Prometheus 文本格式,`urllib` 标准库实现),
+  差值计算两个百分数并注入该次测试的 metrics:
+  - vLLM: `prefix_cache_hit_rate` = Δhits ÷ Δqueries × 100(兼容 `vllm:gpu_prefix_cache_*` /
+    `vllm:prefix_cache_*` / `vllm:cpu_prefix_cache_*` 三组候选名,计数器 `_total` 后缀自动解析);
+    `spec_decode_accept_rate` = Δaccepted ÷ Δdraft × 100;
+  - SGLang: token 级命中率 Δcached ÷ Δprompt(unified 等版本无 `cached_tokens_total` 样本时
+    退回 `1 - Δuncached ÷ Δprompt`);接受率取测试后快照的 `sglang:spec_accept_rate` Gauge
+    (多 dp_rank 部署按 `spec_accept_length` 配对,length=0 的空闲 rank 不参与平均);
+  - `spec_decode_accept_rate` **优先取 fork 版 bench serve 输出直接打印的本次测试
+    `Acceptance rate (%)`**(逐轮精确值,不受指标命名差异与其他流量污染),输出中没有该项时
+    回退上述 `/metrics` 差值口径;
+  - 抓取失败 / 服务无该指标 / 分母为 0 时对应值留空;新增 `ENABLE_METRICS_SCRAPE` /
+    `METRICS_SCRAPE_PATH` / `METRICS_SCRAPE_TIMEOUT` 三个配置项,可整体关闭;
+    抓取失败只告警一次,不中断测试。
+- **逐点指标表 `point_metrics-*.csv`**(`runner.py`): 每个用例搜索结束后,把该用例本次实际测过的
+  每个**成功**并发点(含大步长探索点 / 二分点 / 最终确认点 / 最优并发 ±1 参考点)的关键性能
+  指标写到 `slo_bench/slo_log/<日期>/context_<il>x<ol>/point_metrics-<il>x<ol>-TTFT<t>-TPOT<t>.csv`
+  (每次运行重写),按并发数排序。数据直接取自 `adaptive_concurrency_search` 返回的
+  `cached_results`,不产生额外测试开销;失败点(`ttft/tpot` 为 `-1` 或 `inf`)与
+  `retry_count` 计数键跳过。
+- **全场景汇总表 `import_all_perf.csv`**(`runner.py`): 上述 point_metrics 的全场景汇总表
+  (列完全相同),运行结束整体重写到 `slo_bench/import_all_perf.csv`(每次运行重写、只留最新,
+  语义参考 bench 项目的同名产物),按 `(input_len, output_len, concurrency)` 排序,便于导入
+  表格工具横向对比。
+- 两表列结构(`POINT_METRICS_HEADERS`): `input_len / output_len / concurrency / mean_ttft /
+  mean_tpot / output_token_throughput / total_token_throughput / benchmark_duration` 加两个
+  单并发归一化指标 `output_throughput_per_concurrency`(生成输出吞吐 ÷ 并发数)、
+  `decode_throughput_per_concurrency`(1000 ÷ 平均 TPOT,单条请求流的 decode 速率)与
+  `prefix_cache_hit_rate` / `spec_decode_accept_rate` 两个命中率列。
+- `METRIC_PATTERNS` 新增 `spec_accept_rate`(bench serve 输出的 `Acceptance rate (%)`)。
 
 ### 文档
-- README「输出物」新增「全场景性能汇总 import_all_perf.csv」小节;版本历史表补 v1.5 行。
+- README「输出物」新增「逐点指标 point_metrics-*.csv 与全场景汇总 import_all_perf.csv」小节;
+  配置表补 `ENABLE_METRICS_SCRAPE`;版本历史表补 v1.5 行。
 
 ---
 
