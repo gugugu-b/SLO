@@ -7,7 +7,7 @@ import os
 import time
 
 from .benchmark import reset_bench_error_counter
-from .config import IO, PERF_LOG_DIR, PERF_MODEL_NAME, SCRIPT_START_DATE, SCRIPT_START_TIME, TTFT_LABEL, TPOT_LABEL, VERSION
+from .config import IMPORT_ALL_PERF_HEADERS, IO, PERF_LOG_DIR, PERF_MODEL_NAME, SCRIPT_START_DATE, SCRIPT_START_TIME, TTFT_LABEL, TPOT_LABEL, VERSION
 from .csv_io import get_base_filename, write_to_csv
 from .metrics import reset_warnings
 from .search import adaptive_concurrency_search
@@ -80,11 +80,55 @@ def _write_best_metrics_csv(summary_results):
     logging.info(f"最优指标CSV已写入: {best_metrics_file}")
 
 
+_FAILED_MARKS = (-1, float('inf'))
+
+
+def _collect_all_perf_rows(cached_results: dict) -> list:
+    """从单个用例的 cached_results 提取成功并发点的 import_all_perf 行。
+
+    跳过 retry_count 计数键(4 元组键)与失败点(ttft/tpot 为 -1 或 inf)。
+    """
+    rows = []
+    for key, value in cached_results.items():
+        if len(key) != 3:
+            continue
+        input_len, output_len, concurrency = key
+        ttft, tpot, metrics = value
+        if ttft in _FAILED_MARKS or tpot in _FAILED_MARKS or not metrics:
+            continue
+        mean_tpot = metrics['mean_tpot']
+        rows.append([
+            input_len, output_len, concurrency,
+            metrics['mean_ttft'], mean_tpot,
+            metrics['output_token_throughput'], metrics['total_token_throughput'],
+            metrics['benchmark_duration'],
+            # 单并发输出吞吐 = 生成输出吞吐 ÷ 并发数
+            metrics['output_token_throughput'] / concurrency,
+            # 单并发 decode 吞吐 = 1000/平均TPOT(ms),单条请求流的 decode 速率
+            (1000 / mean_tpot) if mean_tpot > 0 else 0.0,
+        ])
+    return rows
+
+
+def _write_all_perf_csv(all_perf_rows: list):
+    """把本次运行所有用例的逐并发点关键性能指标汇总成一张表,写到 slo_bench/import_all_perf.csv(每次运行重写)。"""
+    out_dir = os.path.join(os.getcwd(), "slo_bench")
+    os.makedirs(out_dir, exist_ok=True)
+    out_file = os.path.join(out_dir, "import_all_perf.csv")
+    rows = sorted(all_perf_rows, key=lambda r: (r[0], r[1], r[2]))
+    with open(out_file, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(IMPORT_ALL_PERF_HEADERS)
+        writer.writerows(rows)
+    logging.info(f"全场景性能汇总CSV已写入: {out_file} (共 {len(rows)} 个成功并发点)")
+
+
 def run_test_cases():
     """遍历 IO 测试用例,执行自适应搜索,写汇总 CSV。"""
     logging.info(f"[{VERSION}] 开始vllm_benchmark并发自动摸高测试")
     start_time = time.time()
     summary_results = []
+    all_perf_rows = []
 
     total = len(IO)
     for idx, (input_len, output_len, concurrences_low, concurrences_high, ttft_max, tpot_max) in enumerate(IO, 1):
@@ -108,6 +152,8 @@ def run_test_cases():
             input_len, output_len, concurrences_low, concurrences_high, ttft_max, tpot_max,
             vllm_bench_result_file_name, max_results_file_name,
         )
+
+        all_perf_rows.extend(_collect_all_perf_rows(cached_results))
 
         best_cache_key = (input_len, output_len, best_concurrency)
         best_metrics = cached_results.get(best_cache_key, (None, None, {}))[2] if best_cache_key in cached_results else {}
@@ -143,3 +189,4 @@ def run_test_cases():
     _move_perf_logs_to_model_dir()
     _write_summary_csv(summary_results)
     _write_best_metrics_csv(summary_results)
+    _write_all_perf_csv(all_perf_rows)

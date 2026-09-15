@@ -5,7 +5,7 @@ import time
 # ============================================================
 # 版本号
 # ============================================================
-VERSION = "v1.4.1"
+VERSION = "v1.5"
 
 # 测试用例:(input_len, output_len, 初始并发low, 初始并发high, TTFT阈值, TPOT阈值)
 IO = [
@@ -94,6 +94,14 @@ VLLM_BENCH_HEADERS = [
 
 MAX_RESULTS_HEADERS = [
     "input_len", "output_len", "concurrency", "ttft", "tpot", "is_optimal",
+]
+
+# import_all_perf.csv 表头:本次运行所有用例的逐并发点关键性能指标汇总(每次运行重写)
+IMPORT_ALL_PERF_HEADERS = [
+    "input_len", "output_len", "concurrency",
+    "mean_ttft", "mean_tpot",
+    "output_token_throughput", "total_token_throughput", "benchmark_duration",
+    "output_throughput_per_concurrency", "decode_throughput_per_concurrency",
 ]
 
 # 指标正则:每个指标一个独立命名组,内层再命名一个数值捕获组

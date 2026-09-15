@@ -138,6 +138,7 @@ git diff v1.0 v1.1     # 对比两个版本
 
 | 版本     | 日期       | 主要变更                                                                |
 |----------|------------|-------------------------------------------------------------------------|
+| **v1.5** | 2026-09-15 | 新增 `slo_bench/import_all_perf.csv` 全场景逐并发点性能汇总表(每次运行重写) |
 | **v1.4.1** | 2026-08-27 | 修复小步长分支漏 `math.isfinite` 守卫导致 `OverflowError`(TTFT 瓶颈 + TPOT 梯度 ≤0 场景) |
 | **v1.4** | 2026-07-07 | prefix_repetition 模式 num_prompts = 并发 × 4(`NUM_PROMPTS_PER_CONCURRENCY`);文件名 np 段按模式分支 |
 | **v1.3** | 2026-07-07 | 新增 `ENABLE_PREFIX_REPETITION` 前缀重复测试模式;修复 random/prefix_repetition 两种模式漏传 `--max-concurrency` 导致并发压不出 |
@@ -175,6 +176,20 @@ input_len, output_len, concurrency, ttft, tpot, is_optimal
 ```
 
 `is_optimal=1` 的行就是该测试用例下被识别的**临界最大并发数**。
+
+### 全场景性能汇总 import_all_perf.csv
+
+每次运行结束还会在 `slo_bench/import_all_perf.csv` 整体重写一张**全场景汇总表**(每次运行重写、只留最新),收录本次运行所有用例实际测过的每个**成功**并发点(含探索点 / 二分点 / 最终确认点 / 最优并发 ±1 参考点),按 `(input_len, output_len, concurrency)` 排序,便于导入表格工具横向对比:
+
+```
+input_len, output_len, concurrency,
+mean_ttft, mean_tpot,
+output_token_throughput, total_token_throughput, benchmark_duration,
+output_throughput_per_concurrency, decode_throughput_per_concurrency
+```
+
+- `output_throughput_per_concurrency` — 单并发输出吞吐 = 生成输出吞吐 ÷ 并发数;
+- `decode_throughput_per_concurrency` — 单并发 decode 吞吐 = 1000 ÷ 平均 TPOT(ms),即单条请求流在 decode 阶段的 token 速率。
 
 ---
 
