@@ -8,7 +8,7 @@ import time
 
 from .benchmark import reset_bench_error_counter
 from .config import IO, PERF_LOG_DIR, PERF_MODEL_NAME, POINT_METRICS_HEADERS, SCRIPT_START_DATE, SCRIPT_START_TIME, TTFT_LABEL, TPOT_LABEL, VERSION
-from .csv_io import get_base_filename, write_to_csv
+from .csv_io import get_base_filename, point_metrics_row, write_to_csv
 from .metrics import reset_warnings
 from .search import adaptive_concurrency_search
 
@@ -96,26 +96,17 @@ def _collect_all_perf_rows(cached_results: dict) -> list:
         ttft, tpot, metrics = value
         if ttft in _FAILED_MARKS or tpot in _FAILED_MARKS or not metrics:
             continue
-        mean_tpot = metrics['mean_tpot']
-        rows.append([
-            input_len, output_len, concurrency,
-            metrics['mean_ttft'], mean_tpot,
-            metrics['output_token_throughput'], metrics['total_token_throughput'],
-            metrics['benchmark_duration'],
-            # 单并发输出吞吐 = 生成输出吞吐 ÷ 并发数
-            metrics['output_token_throughput'] / concurrency,
-            # 单并发 decode 吞吐 = 1000/平均TPOT(ms),单条请求流的 decode 速率
-            (1000 / mean_tpot) if mean_tpot > 0 else 0.0,
-            # /metrics 前后快照差值(百分数);抓取失败/无该指标时为空串
-            metrics.get('prefix_cache_hit_rate', ''),
-            metrics.get('spec_decode_accept_rate', ''),
-        ])
+        rows.append(point_metrics_row(input_len, output_len, concurrency, metrics))
     return rows
 
 
 def _write_point_metrics_csv(rows: list, input_len: int, output_len: int,
                              ttft_max: int, tpot_max: int):
-    """把该用例所有成功并发点的关键性能指标写到 point_metrics-*.csv(每次运行重写)。"""
+    """把该用例所有成功并发点的关键性能指标写到 point_metrics-*.csv(用例结束整体重写)。
+
+    测试过程中每个成功点已在 _formal_test_with_scrape 中即时追加;
+    用例搜索结束后按并发数整体重写一次,得到排序、去重(重测同一并发只留最新)的最终版本。
+    """
     log_dir = os.path.join(
         os.getcwd(), "slo_bench", "slo_log", SCRIPT_START_DATE, f"context_{input_len}x{output_len}",
     )

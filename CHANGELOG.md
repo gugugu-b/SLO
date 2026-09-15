@@ -4,6 +4,35 @@
 
 ---
 
+## [v1.5.1] - 2026-09-15
+
+相对 v1.5 的变更。
+
+### 新功能
+- **benchmark 命令显式下发 `--percentile-metrics ttft,tpot,itl,e2el`**(`config.py` + `benchmark.py`):
+  此前未传该参数,用的 vllm 默认值(ttft,tpot,itl);新增 `PERCENTILE_METRICS` 配置项,e2el 为
+  端到端时延(需要 bench serve 侧支持该取值)。配套提取 `Mean/Median/P99 E2EL (ms)` 到 metrics
+  (`METRIC_PATTERNS` 新增 `mean_e2el` / `median_e2el` / `p99_e2el`),并落到
+  `vllm_bench_result-*.csv` 新增的 `mean_e2el / median_e2el / p99_e2el` 三列
+  (`VLLM_BENCH_HEADERS`)+ `perf_log` 的 Extracted Metrics 段。
+  **注意**: 该 CSV 追加写,旧表头无这三列——升级后重跑前清掉当天旧的
+  `vllm_bench_result-*.csv`,避免新旧行错位。
+- **point_metrics-*.csv 即时落盘**(`benchmark.py` + `csv_io.py` + `runner.py`): 每个成功并发点
+  在 `_formal_test_with_scrape` 测完**当场追加**一行(进程中断也不丢已测结果,此前要等用例搜索
+  结束才一次性写出);用例结束后从 `cached_results` 整体重写为按并发数排序、去重的最终版本
+  (重测同一并发只留最新)。行构造抽为 `csv_io.point_metrics_row()` 供即时追加与汇总共用;
+  v1.5 已有的"收录全部成功并发点"语义不变。
+
+### 修复
+- **prefix_repetition 模式 NameError**(`benchmark.py`): `NUM_PROMPTS_PER_CONCURRENCY` 在
+  `_build_bench_cmd` / `save_perf_log_entry` 中使用但漏 import,默认 random 模式因条件短路
+  不触发,一开 `ENABLE_PREFIX_REPETITION` 即崩;补上 import。
+
+### 文档
+- README 补 v1.5.1 版本历史行。
+
+---
+
 ## [v1.5] - 2026-09-15
 
 相对 v1.4.1 的变更。

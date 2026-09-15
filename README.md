@@ -139,6 +139,7 @@ git diff v1.0 v1.1     # 对比两个版本
 
 | 版本     | 日期       | 主要变更                                                                |
 |----------|------------|-------------------------------------------------------------------------|
+| **v1.5.1** | 2026-09-15 | benchmark 命令显式加 `--percentile-metrics ttft,tpot,itl,e2el`,E2EL 提取进 `vllm_bench_result` / `perf_log`;`point_metrics-*.csv` 每测完一个并发点即时落盘 |
 | **v1.5** | 2026-09-15 | 新增逐点指标 `point_metrics-*.csv` 与全场景汇总 `import_all_perf.csv`;抓取 `/metrics` 统计 prefix cache 命中率与投机采样接受率 |
 | **v1.4.1** | 2026-08-27 | 修复小步长分支漏 `math.isfinite` 守卫导致 `OverflowError`(TTFT 瓶颈 + TPOT 梯度 ≤0 场景) |
 | **v1.4** | 2026-07-07 | prefix_repetition 模式 num_prompts = 并发 × 4(`NUM_PROMPTS_PER_CONCURRENCY`);文件名 np 段按模式分支 |
@@ -180,10 +181,12 @@ input_len, output_len, concurrency, ttft, tpot, is_optimal
 
 ### 逐点指标 point_metrics-*.csv 与全场景汇总 import_all_perf.csv
 
-每个测试用例结束后,在 `slo_bench/slo_log/<日期>/context_<il>x<ol>/` 下写一份
-`point_metrics-<il>x<ol>-TTFT<ttft>-TPOT<tpot>.csv`(每次运行重写),收录该用例本次
-实际测过的每个**成功**并发点(含探索点 / 二分点 / 最终确认点 / 最优并发 ±1 参考点),
-按并发数排序;运行结束再把所有用例的行汇总重写到 `slo_bench/import_all_perf.csv`
+每个用例在 `slo_bench/slo_log/<日期>/context_<il>x<ol>/` 下有一份
+`point_metrics-<il>x<ol>-TTFT<ttft>-TPOT<tpot>.csv`,收录该用例本次实际测过的每个
+**成功**并发点(含探索点 / 二分点 / 最终确认点 / 最优并发 ±1 参考点)——**不是只存
+最后达标的最优并发**。每个点测完当场追加一行(含前两轮的命中率列),进程中途被打断
+也不丢已测结果;用例搜索结束后再整体重写为按并发数排序、去重的最终版本(重测同一
+并发只留最新)。运行结束把所有用例的行汇总重写到 `slo_bench/import_all_perf.csv`
 (每次运行重写、只留最新),两张表列完全相同:
 
 ```

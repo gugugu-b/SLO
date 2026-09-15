@@ -20,6 +20,9 @@ from .config import (
     METRICS_SCRAPE_PATH,
     METRICS_SCRAPE_TIMEOUT,
     MODEL,
+    NUM_PROMPTS_PER_CONCURRENCY,
+    PERCENTILE_METRICS,
+    POINT_METRICS_HEADERS,
     POST_TEST_SLEEP,
     PORT,
     PREFIX_REPETITION_DATASET_NAME,
@@ -35,7 +38,7 @@ from .config import (
     MAX_RESULTS_HEADERS,
     PERF_LOG_DIR,
 )
-from .csv_io import get_base_filename, write_to_csv
+from .csv_io import get_base_filename, point_metrics_row, write_to_csv
 from .metrics import (
     _extract_all_metrics,
     compute_metrics_rates,
@@ -127,6 +130,7 @@ def _build_bench_cmd(input_len: int, output_len: int, concurrency: int):
             "--prefix-repetition-suffix-len", str(suffix_len),
             "--prefix-repetition-output-len", str(output_len),
             "--prefix-repetition-num-prefixes", str(PREFIX_REPETITION_NUM_PREFIXES),
+            "--percentile-metrics", PERCENTILE_METRICS,
             IGNORE_EOS,
         ]
     # 默认 random 模式
@@ -142,6 +146,7 @@ def _build_bench_cmd(input_len: int, output_len: int, concurrency: int):
         "--max-concurrency", str(concurrency),
         "--random-input-len", str(input_len),
         "--random-output-len", str(output_len),
+        "--percentile-metrics", PERCENTILE_METRICS,
         IGNORE_EOS,
     ]
 
@@ -191,6 +196,7 @@ def _execute_test(cmd, input_len, output_len, concurrency, metrics,
                     m['mean_ttft'], m['median_ttft'], m['p99_ttft'],
                     m['mean_tpot'], m['median_tpot'], m['p99_tpot'],
                     m['mean_itl'], m['median_itl'], m['p99_itl'],
+                    m['mean_e2el'], m['median_e2el'], m['p99_e2el'],
                 ],
                 vllm_bench_result_file_name,
                 headers=VLLM_BENCH_HEADERS,
@@ -225,8 +231,13 @@ def _execute_test(cmd, input_len, output_len, concurrency, metrics,
 
 
 def _formal_test_with_scrape(cmd, input_len, output_len, concurrency,
-                             vllm_bench_result_file_name, max_results_file_name):
-    """正式测试:前后各抓一次 /metrics,差值算 prefix cache 命中率与投机采样接受率,注入 metrics。"""
+                             vllm_bench_result_file_name, max_results_file_name,
+                             ttft_max, tpot_max):
+    """正式测试:前后各抓一次 /metrics,差值算 prefix cache 命中率与投机采样接受率,注入 metrics。
+
+    成功的测试点当场把指标行追加到 point_metrics-*.csv,进程中断也不丢已测结果;
+    失败点(ttft/tpot 为 -1 或 inf,无有效指标)不落盘。
+    """
     before = _scrape_metrics_snapshot()
     ttft, tpot, metrics = _execute_test(
         cmd, input_len, output_len, concurrency, {},
@@ -241,6 +252,14 @@ def _formal_test_with_scrape(cmd, input_len, output_len, concurrency,
         if math.isfinite(bench_rate):
             spec_rate = round(bench_rate, 2)
         metrics['spec_decode_accept_rate'] = spec_rate
+        if ttft not in (-1, float('inf')) and tpot not in (-1, float('inf')):
+            write_to_csv(
+                point_metrics_row(input_len, output_len, concurrency, metrics),
+                get_base_filename("point_metrics", input_len, output_len, ttft_max, tpot_max),
+                headers=POINT_METRICS_HEADERS,
+                input_len=input_len,
+                output_len=output_len,
+            )
     return ttft, tpot, metrics
 
 
@@ -266,11 +285,13 @@ def run_benchmark_with_metrics(input_len: int, output_len: int, concurrency: int
             return _formal_test_with_scrape(
                 cmd, input_len, output_len, concurrency,
                 vllm_bench_result_file_name, max_results_file_name,
+                ttft_max, tpot_max,
             )
         else:
             return _formal_test_with_scrape(
                 cmd, input_len, output_len, concurrency,
                 vllm_bench_result_file_name, max_results_file_name,
+                ttft_max, tpot_max,
             )
     except Exception as e:
         logging.error(f"测试执行失败: {str(e)}")

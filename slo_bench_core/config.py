@@ -5,7 +5,7 @@ import time
 # ============================================================
 # 版本号
 # ============================================================
-VERSION = "v1.5"
+VERSION = "v1.5.1"
 
 # 测试用例:(input_len, output_len, 初始并发low, 初始并发high, TTFT阈值, TPOT阈值)
 IO = [
@@ -79,6 +79,9 @@ SUBPROCESS_TIMEOUT = 3600       # vllm bench serve 子进程超时(秒)
 POST_TEST_SLEEP = 2             # 单次测试后等待(秒)
 RETRY_SLEEP = 2                 # 失败重试间隔(秒)
 
+# benchmark 命令参数
+PERCENTILE_METRICS = "ttft,tpot,itl,e2el"  # --percentile-metrics,e2el 为端到端时延
+
 # /metrics 抓取(用于 prefix cache 命中率与投机采样接受率统计)
 ENABLE_METRICS_SCRAPE = True     # 是否抓取 /metrics
 METRICS_SCRAPE_PATH = "/metrics"  # 抓取路径
@@ -95,6 +98,7 @@ VLLM_BENCH_HEADERS = [
     "mean_ttft", "median_ttft", "p99_ttft",
     "mean_tpot", "median_tpot", "p99_tpot",
     "mean_itl", "median_itl", "p99_itl",
+    "mean_e2el", "median_e2el", "p99_e2el",
 ]
 
 MAX_RESULTS_HEADERS = [
@@ -129,6 +133,9 @@ METRIC_PATTERNS = {
     'mean_itl': r"[Mm]ean\s+ITL\s*\(ms\)?:\s*(\d+(?:\.\d+)?)",
     'median_itl': r"[Mm]edian\s+ITL\s*\(ms\)?:\s*(\d+(?:\.\d+)?)",
     'p99_itl': r"P99\s+ITL\s*\(ms\)?:\s*(\d+(?:\.\d+)?)",
+    'mean_e2el': r"[Mm]ean\s+E2EL\s*\(ms\)?:\s*(\d+(?:\.\d+)?)",
+    'median_e2el': r"[Mm]edian\s+E2EL\s*\(ms\)?:\s*(\d+(?:\.\d+)?)",
+    'p99_e2el': r"P99\s+E2EL\s*\(ms\)?:\s*(\d+(?:\.\d+)?)",
     # fork 版 bench serve 直接打印的本次测试接受率(优先于 /metrics 差值口径)
     'spec_accept_rate': r"[Aa]cceptance\s+[Rr]ate\s*\(%\)\s*:\s*(\d+(?:\.\d+)?)",
 }

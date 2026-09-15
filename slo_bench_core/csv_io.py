@@ -13,6 +13,25 @@ def get_base_filename(prefix: str, input_len: int, output_len: int, ttft_max: in
     return f"{prefix}-{input_len}x{output_len}-TTFT{ttft_max}-TPOT{tpot_max}.csv"
 
 
+def point_metrics_row(input_len: int, output_len: int, concurrency: int, metrics: dict) -> list:
+    """单个成功并发点的指标行(与 config.POINT_METRICS_HEADERS 对齐)。"""
+    m = metrics
+    mean_tpot = m['mean_tpot']
+    return [
+        input_len, output_len, concurrency,
+        m['mean_ttft'], mean_tpot,
+        m['output_token_throughput'], m['total_token_throughput'],
+        m['benchmark_duration'],
+        # 单并发输出吞吐 = 生成输出吞吐 ÷ 并发数
+        m['output_token_throughput'] / concurrency,
+        # 单并发 decode 吞吐 = 1000/平均TPOT(ms),单条请求流的 decode 速率
+        (1000 / mean_tpot) if mean_tpot > 0 else 0.0,
+        # /metrics 前后快照差值(百分数);抓取失败/无该指标时为空串
+        m.get('prefix_cache_hit_rate', ''),
+        m.get('spec_decode_accept_rate', ''),
+    ]
+
+
 def write_to_csv(data: List, filename: str = "results.csv", headers: List = None,
                  input_len: int = None, output_len: int = None):
     """将一行 data 追加到 CSV。目录按日期 + 上下文组合自动生成。"""
