@@ -139,6 +139,7 @@ git diff v1.0 v1.1     # 对比两个版本
 
 | 版本     | 日期       | 主要变更                                                                |
 |----------|------------|-------------------------------------------------------------------------|
+| **v1.5.2** | 2026-09-24 | bench serve 命令下发采样温度 `--temperature`(`TEMPERATURE`,默认 0,两种模式共用) |
 | **v1.5.1** | 2026-09-15 | benchmark 命令显式加 `--percentile-metrics ttft,tpot,itl,e2el`,E2EL 提取进 `vllm_bench_result` / `perf_log`;`point_metrics-*.csv` 每测完一个并发点即时落盘 |
 | **v1.5** | 2026-09-15 | 新增逐点指标 `point_metrics-*.csv` 与全场景汇总 `import_all_perf.csv`;抓取 `/metrics` 统计 prefix cache 命中率与投机采样接受率 |
 | **v1.4.1** | 2026-08-27 | 修复小步长分支漏 `math.isfinite` 守卫导致 `OverflowError`(TTFT 瓶颈 + TPOT 梯度 ≤0 场景) |

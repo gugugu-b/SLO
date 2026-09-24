@@ -5,7 +5,7 @@ import time
 # ============================================================
 # 版本号
 # ============================================================
-VERSION = "v1.5.1"
+VERSION = "v1.5.2"
 
 # 测试用例:(input_len, output_len, 初始并发low, 初始并发high, TTFT阈值, TPOT阈值)
 IO = [
@@ -31,6 +31,7 @@ BACKEND = "vllm"
 SERVED_MODEL_NAME = "DeepSeek-V4-Flash-Channel-FP8-w8a8"
 MODEL = "/data/model/DeepSeek-V4-Flash-Channel-FP8-w8a8"
 DATASET_NAME = "random"
+TEMPERATURE = 0                 # bench serve 采样温度(random / prefix_repetition 两种模式共用)
 IGNORE_EOS = "--ignore-eos"
 
 # ============================================================

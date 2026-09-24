@@ -4,6 +4,20 @@
 
 ---
 
+## [v1.5.2] - 2026-09-24
+
+相对 v1.5.1 的变更。
+
+### 新功能
+- **bench serve 命令下发采样温度**(`config.py` + `benchmark.py`): 环境配置区新增 `TEMPERATURE`
+  (默认 0,random / prefix_repetition 两种模式共用,取值可自行调整),两种数据集模式的命令统一
+  追加 `--temperature` 参数(实现参考 bench 项目同名改动)。
+
+### 文档
+- README 补 v1.5.2 版本历史行。
+
+---
+
 ## [v1.5.1] - 2026-09-15
 
 相对 v1.5 的变更。
