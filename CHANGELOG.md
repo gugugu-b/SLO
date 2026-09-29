@@ -4,6 +4,43 @@
 
 ---
 
+## [v1.5.4] - 2026-09-29
+
+相对 v1.5.3 的变更。
+
+### 新功能
+- **逐点指标表新增端到端时延与请求吞吐两列**(`config.py` + `csv_io.py`):
+  `point_metrics-*.csv` 与 `import_all_perf.csv` 末尾新增 `mean_e2el`(Mean E2EL,ms)与
+  `req_throughput`(Request throughput,req/s),直接取自 bench serve 输出——两项在 v1.5.1
+  就已提取进 metrics 并落到 `vllm_bench_result-*.csv`,本次接到逐点指标表末尾。
+  输出未打印该指标时留空(inf 兜底值不落盘,如旧版 fork 不支持 e2el)。
+  **注意**: `point_metrics-*.csv` 测试过程中追加写,同日升级重跑前清掉当天旧文件,
+  避免新旧列数错位;`import_all_perf.csv` 每次运行整体重写,不受影响。
+
+---
+
+## [v1.5.3] - 2026-09-24
+
+相对 v1.5.2 的变更。
+
+### 修复
+- **`/metrics` 抓取绕过代理环境变量**(`metrics.py`): 集群节点常设 `http(s)_proxy` /
+  `all_proxy`,直连本机被测服务的抓取被代理劫持后以 502 等错误失败,两列命中率恒为空。
+  `scrape_prometheus_metrics` 改用 `ProxyHandler({})` opener 强制直连,不再受代理变量影响。
+
+### 改进
+- **序列缺失不再静默留空**(`metrics.py`): 抓取成功但找不到 prefix cache / 投机采样指标时,
+  每列告警一次并给出排查方向(未开启 `--enable-prefix-caching` / 未开启投机解码 / 指标名不同),
+  此前只有抓取失败才告警,序列缺失无任何提示、极难排查。
+- **新增独立诊断入口** `python -m slo_bench_core.metrics`(`metrics.py`): 单次抓取
+  /metrics,报告连通性、后端识别(vllm/sglang)、prefix cache 与投机采样相关指标序列名、
+  两列命中率可计算性结论;命中率列意外为空时先跑它定位。
+
+### 文档
+- README 补 v1.5.3 版本历史行与诊断命令说明。
+
+---
+
 ## [v1.5.2] - 2026-09-24
 
 相对 v1.5.1 的变更。

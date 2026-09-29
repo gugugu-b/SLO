@@ -139,6 +139,8 @@ git diff v1.0 v1.1     # 对比两个版本
 
 | 版本     | 日期       | 主要变更                                                                |
 |----------|------------|-------------------------------------------------------------------------|
+| **v1.5.4** | 2026-09-29 | 逐点指标表(`point_metrics-*.csv` / `import_all_perf.csv`)末尾新增 `mean_e2el` 与 `req_throughput` 两列(直接取自 bench serve 输出) |
+| **v1.5.3** | 2026-09-24 | `/metrics` 抓取绕过代理环境变量;序列缺失时告警一次(不再静默留空);新增 `python -m slo_bench_core.metrics` 诊断命令 |
 | **v1.5.2** | 2026-09-24 | bench serve 命令下发采样温度 `--temperature`(`TEMPERATURE`,默认 0,两种模式共用) |
 | **v1.5.1** | 2026-09-15 | benchmark 命令显式加 `--percentile-metrics ttft,tpot,itl,e2el`,E2EL 提取进 `vllm_bench_result` / `perf_log`;`point_metrics-*.csv` 每测完一个并发点即时落盘 |
 | **v1.5** | 2026-09-15 | 新增逐点指标 `point_metrics-*.csv` 与全场景汇总 `import_all_perf.csv`;抓取 `/metrics` 统计 prefix cache 命中率与投机采样接受率 |
@@ -185,7 +187,7 @@ input_len, output_len, concurrency, ttft, tpot, is_optimal
 每个用例在 `slo_bench/slo_log/<日期>/context_<il>x<ol>/` 下有一份
 `point_metrics-<il>x<ol>-TTFT<ttft>-TPOT<tpot>.csv`,收录该用例本次实际测过的每个
 **成功**并发点(含探索点 / 二分点 / 最终确认点 / 最优并发 ±1 参考点)——**不是只存
-最后达标的最优并发**。每个点测完当场追加一行(含前两轮的命中率列),进程中途被打断
+最后达标的最优并发**。每个点测完当场追加一行(含命中率、E2EL 与请求吞吐列),进程中途被打断
 也不丢已测结果;用例搜索结束后再整体重写为按并发数排序、去重的最终版本(重测同一
 并发只留最新)。运行结束把所有用例的行汇总重写到 `slo_bench/import_all_perf.csv`
 (每次运行重写、只留最新),两张表列完全相同:
@@ -195,11 +197,14 @@ input_len, output_len, concurrency,
 mean_ttft, mean_tpot,
 output_token_throughput, total_token_throughput, benchmark_duration,
 output_throughput_per_concurrency, decode_throughput_per_concurrency,
-prefix_cache_hit_rate, spec_decode_accept_rate
+prefix_cache_hit_rate, spec_decode_accept_rate,
+mean_e2el, req_throughput
 ```
 
 - `output_throughput_per_concurrency` — 单并发输出吞吐 = 生成输出吞吐 ÷ 并发数;
 - `decode_throughput_per_concurrency` — 单并发 decode 吞吐 = 1000 ÷ 平均 TPOT(ms),即单条请求流在 decode 阶段的 token 速率;
+- `mean_e2el` / `req_throughput` — Mean E2EL(ms)与 Request throughput(req/s),直接取自
+  bench serve 输出;输出未打印该指标时(如旧版 fork 不支持 e2el)留空;
 - `prefix_cache_hit_rate`(prefix cache 命中率,百分数)— 来自被测服务 `/metrics`
   正式测试**前后快照**的差值,按指标前缀自动识别后端:
   - vLLM: Δhits ÷ Δqueries × 100(兼容 `vllm:gpu_prefix_cache_*` / `vllm:prefix_cache_*` /
@@ -215,8 +220,15 @@ prefix_cache_hit_rate, spec_decode_accept_rate
   - SGLang: 取测试后快照的 `sglang:spec_accept_rate` Gauge(多 dp_rank 按
     `spec_accept_length` 配对,空闲 rank 不参与平均)。
 
-抓取失败、服务无该指标或分母为 0 时对应列留空;`ENABLE_METRICS_SCRAPE=False` 可整体
-关闭抓取。
+抓取失败、服务无该指标或分母为 0 时对应列留空(抓取成功但序列缺失会告警一次并给出
+排查方向);`ENABLE_METRICS_SCRAPE=False` 可整体关闭抓取。抓取强制直连,不受
+`http(s)_proxy` 环境变量影响。
+
+两列命中率意外为空时,先跑独立诊断(报告连通性 / 后端 / 相关指标序列名 / 可计算性结论):
+
+```bash
+python -m slo_bench_core.metrics
+```
 
 ---
 

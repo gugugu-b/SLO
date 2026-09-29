@@ -2,6 +2,7 @@
 
 import csv
 import logging
+import math
 import os
 from typing import List
 
@@ -29,6 +30,9 @@ def point_metrics_row(input_len: int, output_len: int, concurrency: int, metrics
         # /metrics 前后快照差值(百分数);抓取失败/无该指标时为空串
         m.get('prefix_cache_hit_rate', ''),
         m.get('spec_decode_accept_rate', ''),
+        # bench serve 未打印该指标时为 inf 兜底值,留空
+        m['mean_e2el'] if math.isfinite(m['mean_e2el']) else '',
+        m['req_throughput'] if math.isfinite(m['req_throughput']) else '',
     ]
 
 

@@ -5,7 +5,7 @@ import time
 # ============================================================
 # 版本号
 # ============================================================
-VERSION = "v1.5.2"
+VERSION = "v1.5.4"
 
 # 测试用例:(input_len, output_len, 初始并发low, 初始并发high, TTFT阈值, TPOT阈值)
 IO = [
@@ -107,13 +107,15 @@ MAX_RESULTS_HEADERS = [
 ]
 
 # point_metrics-*.csv / import_all_perf.csv 共用表头:
-# 逐并发点关键性能指标(后两列为 /metrics 差值口径的百分数,不可用时留空)
+# 逐并发点关键性能指标(命中率两列为 /metrics 差值口径的百分数,不可用时留空;
+# 末尾 E2EL/请求吞吐两列在 bench serve 未打印该指标时留空)
 POINT_METRICS_HEADERS = [
     "input_len", "output_len", "concurrency",
     "mean_ttft", "mean_tpot",
     "output_token_throughput", "total_token_throughput", "benchmark_duration",
     "output_throughput_per_concurrency", "decode_throughput_per_concurrency",
     "prefix_cache_hit_rate", "spec_decode_accept_rate",
+    "mean_e2el", "req_throughput",
 ]
 
 # 指标正则:每个指标一个独立命名组,内层再命名一个数值捕获组

@@ -92,9 +92,14 @@ def scrape_prometheus_metrics(host: str, port: int, path: str = "/metrics",
     同名多条序列(不同 label,如多 dp_rank)保留全部样本与 label,由调用方按指标语义
     聚合(计数器求和 / 按 dp_rank 配对);注释行跳过;
     网络错误原样抛出,由调用方处理。
+
+    显式绕过 http(s)_proxy/all_proxy 环境变量:被测服务与本工具几乎总在同一台机器,
+    集群节点常设代理变量,直连请求被代理劫持会以 502 等错误失败。
     """
     url = f"http://{host}:{port}{path}"
-    with urllib.request.urlopen(url, timeout=timeout) as resp:
+    # ProxyHandler({}) 置空代理表,忽略环境变量代理,强制直连
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(url, timeout=timeout) as resp:
         text = resp.read().decode("utf-8", errors="replace")
     values = {}
     for line in text.splitlines():
@@ -258,6 +263,16 @@ def _compute_sglang_rates(before: dict, after: dict):
     return _sglang_cache_hit_rate(before, after), _sglang_spec_accept_rate(after)
 
 
+# 已告警过的缺失序列(每列一次),避免每个测试点刷屏
+_missing_series_warned = set()
+
+
+def _warn_missing_series_once(tag: str, message: str):
+    if tag not in _missing_series_warned:
+        logging.warning(message)
+        _missing_series_warned.add(tag)
+
+
 def compute_metrics_rates(before: dict, after: dict):
     """用两次 /metrics 快照计算 prefix cache 命中率与投机采样接受率(百分数)。
 
@@ -266,9 +281,79 @@ def compute_metrics_rates(before: dict, after: dict):
     - SGLang: cached_tokens_total/prompt_tokens_total 计数器差值(token 级命中率);
       spec_accept_rate 取测试后 Gauge 快照值
     快照缺失、指标不存在或分母为 0 时对应值为空串(表示不可用)。
+    抓取成功但序列缺失时告警一次并给出排查方向,不再静默留空。
     """
     if not after:
         return "", ""
-    if _detect_backend(after) == "sglang":
-        return _compute_sglang_rates(before, after)
-    return _compute_vllm_rates(before, after)
+    backend = _detect_backend(after)
+    if backend == "sglang":
+        cache_rate, spec_rate = _compute_sglang_rates(before, after)
+        pc_hint = "sglang:cached_tokens_total / prompt_tokens_total"
+        spec_hint = "sglang:spec_accept_rate"
+    else:
+        cache_rate, spec_rate = _compute_vllm_rates(before, after)
+        pc_hint = "vllm:gpu_prefix_cache_hits/queries(_total)"
+        spec_hint = "vllm:spec_decode_num_accepted/draft_tokens(_total)"
+    if cache_rate == "":
+        _warn_missing_series_once("prefix_cache", (
+            "已抓取 /metrics 但无法计算 prefix cache 命中率(寻找 " + pc_hint + "): "
+            "服务端未开启 --enable-prefix-caching 或指标名不同,该列将留空;"
+            "可运行 python -m slo_bench_core.metrics 查看服务实际暴露的指标"
+        ))
+    if spec_rate == "":
+        _warn_missing_series_once("spec_decode", (
+            "已抓取 /metrics 但无法计算投机采样接受率(寻找 " + spec_hint + "): "
+            "未开启投机解码属正常;若 fork 版 bench serve 输出了 Acceptance rate,请核对打印格式;"
+            "可运行 python -m slo_bench_core.metrics 查看服务实际暴露的指标"
+        ))
+    return cache_rate, spec_rate
+
+
+def _diagnose_metrics():
+    """独立诊断入口: python -m slo_bench_core.metrics。
+
+    单次抓取 /metrics,报告连通性、后端识别、相关指标序列与两列命中率可计算性。
+    """
+    from .config import (
+        ENABLE_METRICS_SCRAPE,
+        HOST,
+        METRICS_SCRAPE_PATH,
+        METRICS_SCRAPE_TIMEOUT,
+        PORT,
+    )
+    url = f"http://{HOST}:{PORT}{METRICS_SCRAPE_PATH}"
+    print(f"诊断 {url}")
+    print(f"  ENABLE_METRICS_SCRAPE = {ENABLE_METRICS_SCRAPE}(False 时运行不抓取,两列恒为空)")
+    try:
+        snap = scrape_prometheus_metrics(HOST, PORT, METRICS_SCRAPE_PATH, METRICS_SCRAPE_TIMEOUT)
+    except Exception as e:
+        print(f"[X] 抓取失败: {e!r}")
+        print("    - 确认被测服务监听 HOST:PORT 且暴露 /metrics(vllm 默认有该端点)")
+        print("    - 本抓取已绕过 http(s)_proxy 环境变量,与代理无关")
+        print("    - 服务在远端机器时,把 config.py 的 HOST 改成服务实际 IP")
+        return
+    backend = _detect_backend(snap)
+    print(f"[1] 抓取成功: {len(snap)} 个指标序列,后端识别: {backend or '未识别(既无 vllm: 也无 sglang: 前缀)'}")
+    pc_found = sorted(k for k in snap
+                      if "prefix_cache" in k or "cache_hit" in k
+                      or "cached_token" in k or "prompt_token" in k)
+    spec_found = sorted(k for k in snap if "spec" in k)
+    print(f"[2] prefix cache 相关序列({len(pc_found)} 个): {pc_found or '无'}")
+    print(f"[3] 投机采样相关序列({len(spec_found)} 个): {spec_found or '无'}")
+    if backend == "sglang":
+        ok_pc = (_SGLANG_PROMPT_TOKENS_KEY in snap or _SGLANG_PROMPT_HIST_SUM_KEY in snap) and (
+            _sum_series(snap, _SGLANG_CACHED_TOKENS_KEY) is not None
+            or _sum_series(snap, _SGLANG_UNCACHED_SUM_KEY) is not None)
+        ok_spec = _SGLANG_SPEC_ACCEPT_RATE_KEY in snap
+    else:
+        ok_pc = any(_resolve_counter_key(snap, h) is not None
+                    and _resolve_counter_key(snap, q) is not None
+                    for h, q in _PREFIX_CACHE_PAIRS)
+        ok_spec = (_resolve_counter_key(snap, _SPEC_DECODE_ACCEPTED_KEY) is not None
+                   and _resolve_counter_key(snap, _SPEC_DECODE_DRAFT_KEY) is not None)
+    print(f"[4] 结论: prefix cache 命中率{'可计算' if ok_pc else '不可计算(序列缺失:未开启 --enable-prefix-caching 或指标名不同)'};"
+          f" 投机采样接受率{'可计算' if ok_spec else '不可计算(序列缺失:未开启投机解码,或依赖 fork bench serve 打印 Acceptance rate)'}")
+
+
+if __name__ == "__main__":
+    _diagnose_metrics()
