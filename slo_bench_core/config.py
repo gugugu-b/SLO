@@ -5,7 +5,7 @@ import time
 # ============================================================
 # 版本号
 # ============================================================
-VERSION = "v1.5.4"
+VERSION = "v1.5.5"
 
 # 测试用例:(input_len, output_len, 初始并发low, 初始并发high, TTFT阈值, TPOT阈值)
 IO = [
@@ -41,8 +41,6 @@ ENABLE_PREFIX_REPETITION = False
 PREFIX_REPETITION_DATASET_NAME = "prefix_repetition"
 PREFIX_REPETITION_PC_RATIO = 0.9
 PREFIX_REPETITION_NUM_PREFIXES = 1
-# 传给 --num-prompts 的请求数 = 并发数 × 这个倍数(默认 4,即每个并发跑 4 个请求再汇总体)
-NUM_PROMPTS_PER_CONCURRENCY = 4
 
 # 优化参数
 MAX_RETRIES = 2               # 失败重试次数
@@ -50,6 +48,9 @@ BENCH_MAX_ERRORS = MAX_RETRIES + 1  # 子进程连续失败上限,超出则抛 B
 MAX_CONCURRENCY_LIMIT = 128    # 并发搜索上限
 ENABLE_FINAL_CONFIRMATION = True  # 最优并发做最终确认测试
 ENABLE_DOUBLE_RUN = True      # 第一次预热,第二次作为正式结果
+# 传给 --num-prompts 的请求数 = 并发数 × 这个倍数(默认 4,即每个并发跑 4 个请求再汇总体;
+# random / prefix_repetition 两种模式共用)
+NUM_PROMPTS_PER_CONCURRENCY = 4
 
 # 搜索策略参数
 SEARCH_PARAMS = {

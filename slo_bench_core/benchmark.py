@@ -90,10 +90,10 @@ def save_perf_log_entry(input_len: int, output_len: int, concurrency: int, metri
     """保存 perf_log 格式的日志条目(原始输出 + 提取的指标)。
 
     文件名格式: il{input_len}_ol{output_len}_np{np}_mc{concurrency}.log
-    np 按 dataset 模式区分:random 模式下 np = mc;prefix_repetition 模式下 np = mc × NUM_PROMPTS_PER_CONCURRENCY。
+    np = mc × NUM_PROMPTS_PER_CONCURRENCY(random / prefix_repetition 两种模式一致)。
     """
     os.makedirs(PERF_LOG_DIR, exist_ok=True)
-    np_val = concurrency * NUM_PROMPTS_PER_CONCURRENCY if ENABLE_PREFIX_REPETITION else concurrency
+    np_val = concurrency * NUM_PROMPTS_PER_CONCURRENCY
     sub_log_file = f"{PERF_LOG_DIR}/il{input_len}_ol{output_len}_np{np_val}_mc{concurrency}.log"
     with open(sub_log_file, 'w', encoding='utf-8') as f:
         f.write(f"Input Length: {input_len}\n")
@@ -144,7 +144,7 @@ def _build_bench_cmd(input_len: int, output_len: int, concurrency: int):
         "--served-model-name", SERVED_MODEL_NAME,
         "--model", MODEL,
         "--dataset-name", DATASET_NAME,
-        "--num-prompts", str(concurrency),
+        "--num-prompts", str(concurrency * NUM_PROMPTS_PER_CONCURRENCY),
         "--max-concurrency", str(concurrency),
         "--temperature", str(TEMPERATURE),
         "--random-input-len", str(input_len),

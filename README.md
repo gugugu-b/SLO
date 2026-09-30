@@ -139,6 +139,7 @@ git diff v1.0 v1.1     # 对比两个版本
 
 | 版本     | 日期       | 主要变更                                                                |
 |----------|------------|-------------------------------------------------------------------------|
+| **v1.5.5** | 2026-09-30 | random 模式 `--num-prompts` 也改为 并发 × `NUM_PROMPTS_PER_CONCURRENCY`(两种模式共用,单点请求数 ×4);perf_log 文件名 np 段同步 |
 | **v1.5.4** | 2026-09-29 | 逐点指标表(`point_metrics-*.csv` / `import_all_perf.csv`)末尾新增 `mean_e2el` 与 `req_throughput` 两列(直接取自 bench serve 输出) |
 | **v1.5.3** | 2026-09-24 | `/metrics` 抓取绕过代理环境变量;序列缺失时告警一次(不再静默留空);新增 `python -m slo_bench_core.metrics` 诊断命令 |
 | **v1.5.2** | 2026-09-24 | bench serve 命令下发采样温度 `--temperature`(`TEMPERATURE`,默认 0,两种模式共用) |
@@ -166,9 +167,7 @@ il{input_len}_ol{output_len}_np{np}_mc{concurrency}.log
 - `np` — num prompts(请求数,传给 `vllm bench serve --num-prompts`)
 - `mc` — max concurrency (并发数)
 
-> `np` 按 dataset 模式区分:
-> - `random` 模式: `np = mc`(1:1)
-> - `prefix_repetition` 模式: `np = mc × NUM_PROMPTS_PER_CONCURRENCY`(默认 ×4,即每个并发跑 4 个请求再汇总体,用来给 prefix 缓存充分热身)
+> `np` 两种模式一致: `np = mc × NUM_PROMPTS_PER_CONCURRENCY`(默认 ×4,即每个并发跑 4 个请求再汇总体,统计体量更大更稳;v1.5.5 前 random 模式为 `np = mc` 1:1)
 >
 > 文件名按两个维度同时记录,方便将来调整比例。
 >

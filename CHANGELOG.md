@@ -4,6 +4,20 @@
 
 ---
 
+## [v1.5.5] - 2026-09-30
+
+相对 v1.5.4 的变更。
+
+### 变更
+- **random 模式请求数也受 `NUM_PROMPTS_PER_CONCURRENCY` 控制**(`config.py` + `benchmark.py`):
+  `--num-prompts` 从裸并发数(每个并发 1 个请求)改为 并发数 × 4(与 prefix_repetition 模式
+  一致)。配置项从"前缀重复测试开关"区挪到"优化参数"区,注释标注两种模式共用;
+  perf_log 文件名 np 段两种模式统一为 `np = mc × NUM_PROMPTS_PER_CONCURRENCY`。
+  **影响**: random 模式单点请求数 ×4,单点耗时约 ×4,`successful_requests` 为并发的 4 倍;
+  统计体量更大、指标更稳,但跨版本数据不可直接对比。
+
+---
+
 ## [v1.5.4] - 2026-09-29
 
 相对 v1.5.3 的变更。
